@@ -1,4 +1,4 @@
-# Copyright 2015-2018 Red Hat Inc., and others.
+# Copyright 2015-2019 Red Hat Inc., and others.
 #
 # This file is part of Bodhi.
 #
@@ -39,6 +39,7 @@ import pprint
 import time
 
 import fedmsg.consumers
+import fedora_messaging
 
 from bodhi.server import initialize_db, util, bugs as bug_module
 from bodhi.server.config import config
@@ -47,6 +48,14 @@ from bodhi.server.models import Bug, Update, UpdateType
 
 
 log = logging.getLogger('bodhi')
+
+
+class Handler(object):
+    def __init__(self):
+        self._dumb_handler = UpdatesHandler(None)
+
+    def __call__(self, message: fedora_messaging.api.Message):
+        self._dumb_handler.consume(message)
 
 
 class UpdatesHandler(fedmsg.consumers.FedmsgConsumer):
@@ -77,12 +86,13 @@ class UpdatesHandler(fedmsg.consumers.FedmsgConsumer):
         initialize_db(config)
         self.db_factory = util.transactional_session_maker()
 
-        prefix = hub.config.get('topic_prefix')
-        env = hub.config.get('environment')
-        self.topic = [
-            prefix + '.' + env + '.bodhi.update.request.testing',
-            prefix + '.' + env + '.bodhi.update.edit',
-        ]
+        if config.get('fedmsg_enabled'):
+            prefix = hub.config.get('topic_prefix')
+            env = hub.config.get('environment')
+            self.topic = [
+                prefix + '.' + env + '.bodhi.update.request.testing',
+                prefix + '.' + env + '.bodhi.update.edit',
+            ]
 
         self.handle_bugs = bool(config.get('bodhi_email'))
         if not self.handle_bugs:
@@ -90,9 +100,10 @@ class UpdatesHandler(fedmsg.consumers.FedmsgConsumer):
         else:
             bug_module.set_bugtracker()
 
-        super(UpdatesHandler, self).__init__(hub, *args, **kwargs)
-        log.info('Bodhi updates handler listening on:\n'
-                 '%s' % pprint.pformat(self.topic))
+        if config.get('fedmsg_enabled'):
+            super(UpdatesHandler, self).__init__(hub, *args, **kwargs)
+            log.info('Bodhi updates handler listening on:\n'
+                     '%s' % pprint.pformat(self.topic))
 
     def consume(self, message):
         """
@@ -101,8 +112,13 @@ class UpdatesHandler(fedmsg.consumers.FedmsgConsumer):
         Args:
             message (munch.Munch): A fedmsg about a new or edited update.
         """
-        msg = message['body']['msg']
-        topic = message['topic']
+        if config.get('fedmsg_enabled'):
+            msg = message['body']['msg']
+            topic = message['topic']
+        else:
+            # TODO: Change this to body instea dof _body
+            msg = message._body
+            topic = message.topic
         alias = msg['update'].get('alias')
 
         log.info("Updates Handler handling  %s, %s" % (alias, topic))
