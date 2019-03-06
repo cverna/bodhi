@@ -38,7 +38,6 @@ import logging
 import pprint
 import time
 
-import fedmsg.consumers
 import fedora_messaging
 
 from bodhi.server import initialize_db, util, bugs as bug_module
@@ -50,19 +49,11 @@ from bodhi.server.models import Bug, Update, UpdateType
 log = logging.getLogger('bodhi')
 
 
-class Handler(object):
-    def __init__(self):
-        self._dumb_handler = UpdatesHandler(None)
-
-    def __call__(self, message: fedora_messaging.api.Message):
-        self._dumb_handler.consume(message)
-
-
-class UpdatesHandler(fedmsg.consumers.FedmsgConsumer):
+class UpdatesHandler(object):
     """
     Perform background tasks when updates are created or edited.
 
-    This fedmsg listener waits for messages from the frontend about new or edited updates, and
+    This fedora-messaging listener waits for messages from the frontend about new or edited updates, and
     performs background tasks such as modifying Bugzilla issues (and loading information from
     Bugzilla so we can display it to the user) and looking up wiki test cases.
 
@@ -75,24 +66,12 @@ class UpdatesHandler(fedmsg.consumers.FedmsgConsumer):
 
     config_key = 'updates_handler'
 
-    def __init__(self, hub, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """
         Initialize the UpdatesHandler, subscribing it to the appropriate topics.
-
-        Args:
-            hub (moksha.hub.hub.CentralMokshaHub): The hub this handler is consuming messages from.
-                It is used to look up the hub config.
         """
         initialize_db(config)
         self.db_factory = util.transactional_session_maker()
-
-        if config.get('fedmsg_enabled'):
-            prefix = hub.config.get('topic_prefix')
-            env = hub.config.get('environment')
-            self.topic = [
-                prefix + '.' + env + '.bodhi.update.request.testing',
-                prefix + '.' + env + '.bodhi.update.edit',
-            ]
 
         self.handle_bugs = bool(config.get('bodhi_email'))
         if not self.handle_bugs:
@@ -100,25 +79,15 @@ class UpdatesHandler(fedmsg.consumers.FedmsgConsumer):
         else:
             bug_module.set_bugtracker()
 
-        if config.get('fedmsg_enabled'):
-            super(UpdatesHandler, self).__init__(hub, *args, **kwargs)
-            log.info('Bodhi updates handler listening on:\n'
-                     '%s' % pprint.pformat(self.topic))
-
-    def consume(self, message):
+    def __call__(self, message: fedora_messaging.api.Message):
         """
         Process the given message, updating relevant bugs and test cases.
 
         Args:
-            message (munch.Munch): A fedmsg about a new or edited update.
+            message: A message about a new or edited update.
         """
-        if config.get('fedmsg_enabled'):
-            msg = message['body']['msg']
-            topic = message['topic']
-        else:
-            # TODO: Change this to body instea dof _body
-            msg = message._body
-            topic = message.topic
+        msg = message.body['msg']
+        topic = message.topic
         alias = msg['update'].get('alias')
 
         log.info("Updates Handler handling  %s, %s" % (alias, topic))

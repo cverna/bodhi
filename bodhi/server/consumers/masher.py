@@ -39,11 +39,11 @@ from http.client import IncompleteRead
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-import fedmsg.consumers
-import fedora_messaging
 import jinja2
+import fedora_messaging
 
-from bodhi.server import bugs, initialize_db, log, buildsys, notifications, mail
+
+from bodhi.server import bugs, initialize_db, buildsys, notifications, mail
 from bodhi.server.config import config, validate_path
 from bodhi.server.exceptions import BodhiException
 from bodhi.server.metadata import UpdateInfoMetadata
@@ -54,7 +54,7 @@ from bodhi.server.util import (copy_container, sorted_updates, sanity_check_repo
                                transactional_session_maker)
 
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('bodhi')
 
 
 def checkpoint(method):
@@ -86,62 +86,7 @@ def checkpoint(method):
     return wrapper
 
 
-class Masher(fedmsg.consumers.FedmsgConsumer):
-    """
-    The legacy fedmsg composer.
-
-    This is a fedmsg consumer to handle compose messages.
-    """
-    config_key = 'masher'
-
-    def __init__(self, hub, db_factory=None, mash_dir=config.get('mash_dir'),
-                 *args, **kw):
-        """
-        Initialize the Masher.
-
-        Args:
-            hub (moksha.hub.hub.CentralMokshaHub): The hub this handler is consuming messages from.
-                It is used to look up the hub config values.
-            db_factory (bodhi.server.util.TransactionalSessionMaker or None): If given, used as the
-                db_factory for this Masher. If None (the default), a new TransactionalSessionMaker
-                is created and used.
-            mash_dir (basestring): The directory in which to place mashes.
-        Raises:
-            ValueError: If pungi.cmd is set to a path that does not exist.
-        """
-        self._fedora_messaging_handler = Handler(db_factory, mash_dir)
-
-        prefix = hub.config.get('topic_prefix')
-        env = hub.config.get('environment')
-        self.topic = prefix + '.' + env + '.' + hub.config.get('masher_topic')
-        self.valid_signer = hub.config.get('releng_fedmsg_certname')
-        if not self.valid_signer:
-            log.warning('No releng_fedmsg_certname defined'
-                        'Cert validation disabled')
-
-        super(Masher, self).__init__(hub, *args, **kw)
-        log.info('Bodhi masher listening on topic: %s' % self.topic)
-
-    def consume(self, msg):
-        """
-        Receive a fedmsg and call work() with it.
-
-        Args:
-            msg (munch.Munch): The fedmsg that was received.
-        """
-        self.log.info(msg)
-        if self.valid_signer:
-            if not fedmsg.crypto.validate_signed_by(msg['body'], self.valid_signer,
-                                                    **self.hub.config):
-                self.log.error('Received message with invalid signature!'
-                               'Ignoring.')
-                # TODO: send email notifications
-                return
-
-        self._fedora_messaging_handler.consume(msg['body']['msg'])
-
-
-class Handler(object):
+class ComposerHandler(object):
     """
     The Bodhi composer.
 
@@ -212,9 +157,52 @@ class Handler(object):
                 raise ValueError('{} Check the {} setting.'.format(str(e), setting))
 
     def __call__(self, message: fedora_messaging.api.Message):
-        self.consume(message._body)
+        """
+        Begin the push process.
 
-    def _get_composes(self, msg):
+        Here we organize & prioritize the updates, and fire off separate
+        threads for each repo tag being mashed.
+
+        If there are any security updates in the push, then those repositories
+        will be executed before all others.
+
+        Args:
+            message: The message we are processing. This is how we know what compose jobs to run.
+        """
+        message = message.body["msg"]
+        resume = message.get('resume', False)
+        agent = message.get('agent')
+        notifications.publish(topic="mashtask.start", msg=dict(agent=agent), force=True)
+
+        results = []
+        threads = []
+        for compose in self._get_composes(message):
+            log.info('Now starting mashes')
+
+            masher = get_masher(ContentType.from_string(compose['content_type']))
+            if not masher:
+                log.error(
+                    'Unsupported content type %s submitted for mashing. SKIPPING',
+                    compose['content_type']
+                )
+                continue
+
+            thread = masher(self.max_mashes_sem, compose, agent, self.db_factory,
+                            self.mash_dir, resume)
+            threads.append(thread)
+            thread.start()
+
+        log.info('All of the batches are running. Now waiting for the final results')
+        for thread in threads:
+            thread.join()
+            for result in thread.results():
+                results.append(result)
+
+        log.info('Push complete!  Summary follows:')
+        for result in results:
+            log.info(result)
+
+    def _get_composes(self, msg: dict):
         """
         Return a list of dictionaries that represent the :class:`Composes <Compose>` we should run.
 
@@ -226,7 +214,7 @@ class Handler(object):
         message.
 
         Args:
-            msg (munch.Munch): The body of the received fedmsg.
+            msg: The body of the received message.
         Returns:
             list: A list of dictionaries, as returned from :meth:`Compose.__json__`.
         """
@@ -249,53 +237,6 @@ class Handler(object):
                 c.state = ComposeState.pending
 
             return [c.__json__(composer=True) for c in composes]
-
-    def consume(self, message: typing.Mapping):
-        """
-        Begin the push process.
-
-        Here we organize & prioritize the updates, and fire off separate
-        threads for each repo tag being mashed.
-
-        If there are any security updates in the push, then those repositories
-        will be executed before all others.
-
-        Note: This should be folded into __call__() when support for fedmsg is removed. It is
-        separate only because Masher.consume() receives a Munch object and fedora_messaging
-        receives a Message object and so this gives us a nice way to hand a Mapping from both.
-
-        Args:
-            message: The message we are processing. This is how we know what compose jobs to run.
-        """
-        resume = message.get('resume', False)
-        agent = message.get('agent')
-        notifications.publish(topic="mashtask.start", msg=dict(agent=agent), force=True)
-
-        results = []
-        threads = []
-        for compose in self._get_composes(message):
-            log.info('Now starting mashes')
-
-            masher = get_masher(ContentType.from_string(compose['content_type']))
-            if not masher:
-                log.error('Unsupported content type %s submitted for mashing. SKIPPING',
-                               compose['content_type'])
-                continue
-
-            thread = masher(self.max_mashes_sem, compose, agent, log, self.db_factory,
-                            self.mash_dir, resume)
-            threads.append(thread)
-            thread.start()
-
-        log.info('All of the batches are running. Now waiting for the final results')
-        for thread in threads:
-            thread.join()
-            for result in thread.results():
-                results.append(result)
-
-        log.info('Push complete!  Summary follows:')
-        for result in results:
-            log.info(result)
 
 
 def get_masher(content_type):
@@ -320,7 +261,7 @@ class ComposerThread(threading.Thread):
 
     ctype = None
 
-    def __init__(self, max_concur_sem, compose, agent, log, db_factory, mash_dir, resume=False):
+    def __init__(self, max_concur_sem, compose, agent, db_factory, mash_dir, resume=False):
         """
         Initialize the ComposerThread.
 
@@ -338,7 +279,6 @@ class ComposerThread(threading.Thread):
         """
         super(ComposerThread, self).__init__()
         self.db_factory = db_factory
-        log = log
         self.agent = agent
         self.max_concur_sem = max_concur_sem
         self._compose = compose
@@ -908,7 +848,7 @@ class PungiComposerThread(ComposerThread):
 
     pungi_template_config_key = None
 
-    def __init__(self, max_concur_sem, compose, agent, log, db_factory, mash_dir, resume=False):
+    def __init__(self, max_concur_sem, compose, agent, db_factory, mash_dir, resume=False):
         """
         Initialize the ComposerThread.
 
@@ -924,7 +864,7 @@ class PungiComposerThread(ComposerThread):
             mash_dir (basestring): A path to a directory to generate the mash in.
             resume (bool): Whether or not we are resuming a previous failed mash. Defaults to False.
         """
-        super(PungiComposerThread, self).__init__(max_concur_sem, compose, agent, log, db_factory,
+        super(PungiComposerThread, self).__init__(max_concur_sem, compose, agent, db_factory,
                                                   mash_dir, resume)
         self.devnull = None
         self.mash_dir = mash_dir

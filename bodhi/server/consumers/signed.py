@@ -23,94 +23,22 @@ from the pending-signing to pending-updates-testing tag by RoboSignatory.
 """
 
 import logging
-import pprint
-import typing
-
-import fedmsg.consumers
 
 from bodhi.server import initialize_db
 from bodhi.server.config import config
 from bodhi.server.models import Build
 from bodhi.server.util import transactional_session_maker
 
-
-if typing.TYPE_CHECKING:  # pragma: no cover
-    import fedora_messaging  # noqa: 401
-
+import fedora_messaging
 
 log = logging.getLogger('bodhi')
 
 
-class SignedHandler(fedmsg.consumers.FedmsgConsumer):
+class SignedHandler(object):
     """
     The Bodhi Signed Handler.
 
-    A fedmsg listener waiting for messages from koji about builds being tagged.
-    """
-
-    config_key = 'signed_handler'
-
-    def __init__(self, hub, *args, **kwargs):
-        """
-        Initialize the SignedHandler, configuring its topic and database.
-
-        Args:
-            hub (moksha.hub.hub.CentralMokshaHub): The hub this handler is consuming messages from.
-                It is used to look up the hub config.
-        """
-        prefix = hub.config.get('topic_prefix')
-        env = hub.config.get('environment')
-        self.topic = [
-            prefix + '.' + env + '.buildsys.tag'
-        ]
-
-        super(SignedHandler, self).__init__(hub, *args, **kwargs)
-        log.info('Bodhi signed handler listening on:\n'
-                 '%s' % pprint.pformat(self.topic))
-        self._fedora_messaging_handler = Handler()
-
-    def consume(self, message: dict):
-        """
-        Handle fedmsgs arriving with the configured topic.
-
-        This marks a build as signed if it is assigned to the pending testing release tag.
-
-        Example message format::
-            {
-                u'body': {
-                    u'i': 628,
-                    u'timestamp': 1484692585,
-                    u'msg_id': u'2017-821031da-be3a-4f4b-91df-0baa834ca8a4',
-                    u'crypto': u'x509',
-                    u'topic': u'org.fedoraproject.prod.buildsys.tag',
-                    u'signature': u'100% real please trust me',
-                    u'msg': {
-                        u'build_id': 442562,
-                        u'name': u'colord',
-                        u'tag_id': 214,
-                        u'instance': u's390',
-                        u'tag': 'f26-updates-testing-pending',
-                        u'user': u'sharkcz',
-                        u'version': u'1.3.4',
-                        u'owner': u'sharkcz',
-                        u'release': u'1.fc26'
-                    },
-                },
-            }
-
-        The message can contain additional keys.
-
-        Args:
-            message (dict): The incoming fedmsg in the format described above.
-        """
-        self._fedora_messaging_handler.consume(message['body']['msg'])
-
-
-class Handler(object):
-    """
-    The Bodhi Signed Handler.
-
-    A fedmsg listener waiting for messages from koji about builds being tagged.
+    A fedora-messaging listener waiting for messages from koji about builds being tagged.
     """
 
     def __init__(self):
@@ -118,7 +46,7 @@ class Handler(object):
         initialize_db(config)
         self.db_factory = transactional_session_maker()
 
-    def __call__(self, message: 'fedora_messaging.api.Message'):
+    def __call__(self, message: fedora_messaging.api.Message):
         """
         Handle fedmsgs arriving with the configured topic.
 
@@ -150,11 +78,9 @@ class Handler(object):
         The message can contain additional keys.
 
         Args:
-            message: The incoming fedmsg in the format described above.
+            message: The incoming message in the format described above.
         """
-        self.consume(message._body)
-
-    def consume(self, message):
+        message = message.body['msg']
         build_nvr = '%(name)s-%(version)s-%(release)s' % message
         tag = message['tag']
 
