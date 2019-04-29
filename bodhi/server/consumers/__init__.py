@@ -28,6 +28,7 @@ import fedora_messaging
 from bodhi.server.consumers.composer import ComposerHandler
 from bodhi.server.consumers.signed import SignedHandler
 from bodhi.server.consumers.updates import UpdatesHandler
+from bodhi.server.consumers.greenwave import GreenwaveHandler
 
 
 log = logging.getLogger('bodhi')
@@ -59,4 +60,9 @@ def messaging_callback(msg: fedora_messaging.api.Message):  # noqa: D401
        or msg.topic.endswith('.bodhi.update.edit'):
         handler = UpdatesHandler()
         log.debug('Passing message to the Updates handler')
+        handler(msg)
+
+    if msg.topic.endswith('.greenwave.decision.update'):
+        handler = GreenwaveHandler()
+        log.debug('Passing message to the Greenwave handler')
         handler(msg)
