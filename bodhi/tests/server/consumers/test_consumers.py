@@ -70,9 +70,8 @@ class TestConsumers(base.BaseTestCase):
         messaging_callback(msg)
         handler.assert_called_once_with(msg)
 
-    @mock.patch('bodhi.server.consumers.greenwave.Update.update_test_gating_status')
     @mock.patch('bodhi.server.consumers.GreenwaveHandler')
-    def test_messaging_callback_greenwave(self, Handler, mock_gating):
+    def test_messaging_callback_greenwave(self, Handler):
         msg = Message(
             topic="org.fedoraproject.prod.greenwave.decision.update",
             body={}

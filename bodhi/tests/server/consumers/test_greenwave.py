@@ -18,18 +18,20 @@
 """This test suite contains tests for the bodhi.server.consumers.greenwave module."""
 
 from unittest import mock
-import unittest
 
 from fedora_messaging.api import Message
 
 from bodhi.server import models
 from bodhi.server.consumers import greenwave
+from bodhi.server.config import config
+from bodhi.tests.server.base import BaseTestCase
 
 
-class TestGreenwaveHandlerConsume(unittest.TestCase):
+class TestGreenwaveHandlerConsume(BaseTestCase):
     """Test class for the :func:`GreenwaveHandler.consume` method."""
 
     def setUp(self):
+        super().setUp()
         self.sample_message = Message(
             topic='',
             body={
@@ -62,10 +64,10 @@ class TestGreenwaveHandlerConsume(unittest.TestCase):
                         'taskotron_release_critical_tasks_for_testing'
                     ],
                     'unsatisfied_requirements': [],
-                    'subject_identifier': 'bodhi-3.13.3-1.fc30',
+                    'subject_identifier': 'bodhi-2.0-1.fc17',
                     'subject': [
                         {
-                            'item': 'bodhi-3.13.3-1.fc30',
+                            'item': 'bodhi-2.0-1.fc17',
                             'type': 'koji_build'
                         }
                     ],
@@ -101,12 +103,20 @@ class TestGreenwaveHandlerConsume(unittest.TestCase):
         greenwave.GreenwaveHandler()
         setup_logging.assert_called_once_with()
 
-    @mock.patch('bodhi.server.consumers.greenwave.Update.update_test_gating_status')
-    @mock.patch('bodhi.server.consumers.greenwave.Build')
-    def test_update_test_gating_status(self, mock_build_model, mock_gating):
+    @mock.patch.dict(config, [('greenwave_api_url', 'http://domain.local')])
+    @mock.patch('bodhi.server.initialize_db', mock.MagicMock())
+    def test_update_test_gating_status(self):
         """Assert that messages marking the build as signed updates the database"""
-        update = mock_build_model.get.return_value.update
-        update.test_gating_status = models.TestGatingStatus.waiting
 
-        self.handler(self.sample_message)
-        self.assertTrue(update.test_gating_passed)
+        with mock.patch('bodhi.server.models.util.greenwave_api_post') as mock_greenwave:
+            with mock.patch('bodhi.server.transactional_session_maker',
+                            return_value=mock.MagicMock()):
+                greenwave_response = {
+                    'policies_satisfied': "zsdasd",
+                    'summary': ""
+                }
+                mock_greenwave.return_value = greenwave_response
+                self.handler(self.sample_message)
+
+        build = self.db.query(models.Build).filter_by(nvr="bodhi-2.0-1.fc17").first()
+        assert build.update.test_gating_status == models.TestGatingStatus.passed

@@ -26,9 +26,11 @@ import logging
 
 import fedora_messaging
 
+from bodhi.server import initialize_db
+from bodhi.server.config import config
 from bodhi.server.models import Build
-from bodhi.server.models import Update
 from bodhi.server.logging import setup as setup_logging
+from bodhi.server.util import transactional_session_maker
 
 log = logging.getLogger(__name__)
 
@@ -43,13 +45,15 @@ class GreenwaveHandler:
     def __init__(self):
         """Initialize the GreenwaveHandler."""
         setup_logging()
+        initialize_db(config)
+        self.db_factory = transactional_session_maker()
 
     def __call__(self, message: fedora_messaging.api.Message):
         """Handle messages arriving with the configured topic."""
         msg = message.body['msg']
         subject_identifier = msg['subject_identifier']
-        build = Build.get(subject_identifier)
-        update = Update
-        update = build.update
-        update.update_test_gating_status()
-        log.info("Update of test_gating_status for: %s" % (update.alias))
+        with self.db_factory():
+            build = Build.get(subject_identifier)
+            update = build.update
+            update.update_test_gating_status()
+            log.info("Update of test_gating_status for: %s" % (update.alias))
