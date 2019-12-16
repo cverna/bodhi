@@ -2859,7 +2859,7 @@ class Update(Base):
                 "pushed to stable after the freeze is over. "
             )
         self.comment(db, comment_text, author=u'bodhi')
-
+        db.commit()
         if action == UpdateRequest.testing:
             handle_update.delay(
                 api_version=1, action="testing",
