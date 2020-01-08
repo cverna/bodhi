@@ -3918,11 +3918,15 @@ class Update(Base):
             # This is the object initialization phase. This instance is not ready, don't create
             # the message now. This method will be called again at the end of __init__
             return
-
         message = update_schemas.UpdateReadyForTestingV1.from_dict(
             message=target._build_group_test_message()
         )
-        notifications.publish(message)
+        log.debug("_ready_for_testing sending message")
+        try:
+            notifications.publish(message)
+            log.debug("_ready_for_testing message sent")
+        except Exception as e:
+            log.debug(f"_ready_for_testing failed with exception : {e}")
 
 
 event.listen(

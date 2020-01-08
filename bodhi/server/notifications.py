@@ -86,3 +86,4 @@ def _publish_with_retry(message: 'base.BodhiMessage'):
     while. If it is unable to succeed, it will ultimately raise the Exception.
     """
     api.publish(message)
+    _log.debug(f"{message} published - _publish_with_retry")
