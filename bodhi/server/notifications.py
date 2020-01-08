@@ -41,8 +41,10 @@ def send_messages_after_commit(session):
         session (sqlalchemy.orm.session.Session): The session that was committed.
     """
     if 'messages' in session.info:
+        _log.debug(f"Publishing {len(session.info['messages'])} messages")
         for m in session.info['messages']:
             try:
+                _log.debug(f"Publishing message {m}")
                 _publish_with_retry(m)
             except fml_exceptions.BaseException:
                 # In the future we should handle errors more gracefully
