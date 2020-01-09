@@ -2420,9 +2420,12 @@ class Update(Base):
 
         up.date_modified = datetime.utcnow()
 
+        update_alias = up.alias
+        db.commit()
+
         handle_update.delay(
             api_version=2, action='edit',
-            update_alias=up.alias,
+            update_alias=update_alias,
             agent=request.user.name,
             new_bugs=new_bugs
         )
@@ -2859,11 +2862,14 @@ class Update(Base):
                 "pushed to stable after the freeze is over. "
             )
         self.comment(db, comment_text, author=u'bodhi')
+
+        alias = self.alias
         db.commit()
+
         if action == UpdateRequest.testing:
             handle_update.delay(
                 api_version=2, action="testing",
-                update_alias=self.alias,
+                update_alias=alias,
                 agent=username
             )
         action_message_map = {
