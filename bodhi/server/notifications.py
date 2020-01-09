@@ -44,12 +44,14 @@ def send_messages_after_commit(session):
         _log.debug(f"Publishing {len(session.info['messages'])} messages")
         for m in session.info['messages']:
             try:
-                _log.debug(f"Publishing message {m}")
+                _log.debug(f"Publishing message {m.id} {m.topic}")
                 _publish_with_retry(m)
+                _log.debug("{m.id} {m.topic} message published")
             except fml_exceptions.BaseException:
                 # In the future we should handle errors more gracefully
                 _log.exception("An error occurred publishing %r after a database commit", m)
         session.info['messages'] = []
+        _log.debug("send_messages_after_commit done")
 
 
 def publish(message: 'base.BodhiMessage', force: bool = False):
@@ -86,4 +88,4 @@ def _publish_with_retry(message: 'base.BodhiMessage'):
     while. If it is unable to succeed, it will ultimately raise the Exception.
     """
     api.publish(message)
-    _log.debug(f"{message} published - _publish_with_retry")
+    _log.debug(f"{message.id} {message.topic} published - _publish_with_retry")
