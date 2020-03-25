@@ -2426,7 +2426,8 @@ class Update(Base):
                 })
 
             # Add the pending_signing_tag to all new builds
-            tag_update_builds_task.delay(update=up, builds=new_builds)
+            alias = up.alias
+            tag_update_builds_task.delay(alias=alias, builds=new_builds)
 
         # And, updates with new or removed builds always get their karma reset.
         # https://github.com/fedora-infra/bodhi/issues/511
