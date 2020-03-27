@@ -69,7 +69,7 @@ def compose(api_version: int, **kwargs):
     composer.run(api_version=api_version, data=kwargs)
 
 
-@app.task(name="handle_update")
+@app.task(name="handle_update", ignore_result=True)
 def handle_update(api_version: int, **kwargs):
     """Trigger the Updates handler.
 
