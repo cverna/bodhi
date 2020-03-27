@@ -45,7 +45,7 @@ def main(alias: str, builds: typing.List[str]):
         if update is not None:
             tag_builds(update, builds, koji)
     except Exception:
-        log.exception("There was an error handling tagging builds in koji")
+        log.exception(f"There was an error handling tagging builds in koji for update {alias}")
     finally:
         db_factory._end_session()
 
@@ -64,9 +64,11 @@ def tag_builds(update: Update, builds: typing.List[str],
             # this is a sidetag based update. use the sidetag pending signing tag
             side_tag_pending_signing = update.release.get_pending_signing_side_tag(
                 update.from_tag)
+            log.info(f"Tagging {build} in {side_tag_pending_signing}")
             koji.tagBuild(side_tag_pending_signing, build)
         elif update.release.pending_signing_tag:
             # Add the release's pending_signing_tag to all new builds
+            log.info(f"Tagging {build} in {update.release.pending_signing_tag}")
             koji.tagBuild(update.release.pending_signing_tag, build)
         else:
             # EL6 doesn't have these, and that's okay...
