@@ -131,10 +131,14 @@ def handle_side_and_related_tags_task(aliases: typing.List[str], from_tag: str):
     main(aliases, from_tag)
 
 
-@app.task(name="tag_update_builds")
-def tag_update_builds_task(alias: str, builds: typing.List[str]):
+@app.task(name="tag_update_builds", bind=True)
+def tag_update_builds_task(self, tag: str, builds: typing.List[str]):
     """Handle tagging builds for an update in Koji."""
     from .tag_update_builds import main
     log.info("Received an order to tag builds for an update")
     _do_init()
-    main(alias, builds)
+    try:
+        main(tag, builds)
+    except Exception as e:
+        log.exception("tag_update_builds_task failed, retrying")
+        raise self.retry(exc=e)

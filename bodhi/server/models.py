@@ -2426,8 +2426,16 @@ class Update(Base):
                 })
 
             # Add the pending_signing_tag to all new builds
-            alias = up.alias
-            tag_update_builds_task.delay(alias=alias, builds=new_builds)
+            tag = None
+            if up.from_tag:
+                tag = up.release.get_pending_signing_side_tag(up.from_tag)
+            elif up.release.pending_signing_tag:
+                tag = up.release.pending_signing_tag
+            else:
+                log.warning(f'{up.release.name} has no pending_signing_tag')
+
+            if tag is not None:
+                tag_update_builds_task.delay(tag=tag, builds=new_builds)
 
         # And, updates with new or removed builds always get their karma reset.
         # https://github.com/fedora-infra/bodhi/issues/511
