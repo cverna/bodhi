@@ -876,7 +876,9 @@ class TransactionalSessionMaker(object):
         """
         session = Session()
         try:
+            log.info(f"DEBUG ************** Yield database session {session}")
             yield session
+            log.info(f"DEBUG ************** commit database session {session}")
             session.commit()
         except Exception as e:
             # It is possible for session.rollback() to raise Exceptions, so we will wrap it in an
@@ -888,6 +890,7 @@ class TransactionalSessionMaker(object):
                 log.exception('An Exception was raised while rolling back a transaction.')
             raise e
         finally:
+            log.info(f"DEBUG ************** close database session {session}")
             self._end_session()
 
     def _end_session(self):

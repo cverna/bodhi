@@ -47,8 +47,6 @@ def main():
                 db.commit()
     except Exception:
         log.exception("There was an error approving testing updates.")
-    finally:
-        db_factory._end_session()
 
 
 def approve_update(update: Update, db: Session):
