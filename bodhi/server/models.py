@@ -2463,12 +2463,14 @@ class Update(Base):
         # Commit the changes in the db before calling a celery task.
         db.commit()
 
+        log.info("DEBUG ************* edit Triggering handle_update **************")
         handle_update.delay(
             api_version=2, action='edit',
             update_alias=update_alias,
             agent=request.user.name,
             new_bugs=new_bugs
         )
+        log.info("DEBUG ************* edit handle_update done **************")
 
         return up, caveats
 
@@ -2913,17 +2915,16 @@ class Update(Base):
         notifications.publish(action_message_map[action].from_dict(
             dict(update=self, agent=username)))
 
-        log.debug("DEBUG ************* Set request Committing change to db **************")
         # Commit the changes in the db before calling a celery task.
         db.commit()
 
-        log.debug("DEBUG ************* Set request Triggering handle_update **************")
+        log.info("DEBUG ************* Set request Triggering handle_update **************")
         if action == UpdateRequest.testing:
             handle_update.delay(
                 api_version=2, action="testing",
                 update_alias=alias,
                 agent=username)
-        log.debug("DEBUG ************* Set request handle_update done **************")
+        log.info("DEBUG ************* Set request handle_update done **************")
 
     def waive_test_results(self, username, comment=None, tests=None):
         """
@@ -3329,7 +3330,6 @@ class Update(Base):
             notifications.publish(update_schemas.UpdateCommentV1.from_dict(
                 {'comment': comment.__json__(), 'agent': author}))
 
-        log.debug("DEBUG ************* Notification sent *************")
         # Send a notification to everyone that has commented on this update
         people = set()
         for person in self.get_maintainers():
