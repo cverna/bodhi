@@ -596,7 +596,8 @@ def new_update(request):
                         handle_side_and_related_tags_task.delay(
                             builds=builds,
                             pending_signing_tag=u.release.pending_signing_tag,
-                            from_tag=from_tag)
+                            from_tag=from_tag,
+                            candidate_tag=u.release.candidate_tag)
 
     except LockedUpdateException as e:
         log.warning(str(e))
