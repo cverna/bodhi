@@ -2435,7 +2435,9 @@ class Update(Base):
                 log.warning(f'{up.release.name} has no pending_signing_tag')
 
             if tag is not None:
+                log.info(f"DEBUG ************* new update tag_update_builds_task {up.alias}**************")
                 tag_update_builds_task.delay(tag=tag, builds=new_builds)
+                log.info(f"DEBUG ************* new update tag_update_builds_task done {up.alias}**************")
 
         # And, updates with new or removed builds always get their karma reset.
         # https://github.com/fedora-infra/bodhi/issues/511
