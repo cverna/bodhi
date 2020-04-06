@@ -2463,14 +2463,14 @@ class Update(Base):
         # Commit the changes in the db before calling a celery task.
         db.commit()
 
-        log.info("DEBUG ************* edit Triggering handle_update **************")
+        log.info(f"DEBUG ************* edit Triggering handle_update {update_alias} **************")
         handle_update.delay(
             api_version=2, action='edit',
             update_alias=update_alias,
             agent=request.user.name,
             new_bugs=new_bugs
         )
-        log.info("DEBUG ************* edit handle_update done **************")
+        log.info(f"DEBUG ************* edit handle_update done {update_alias} **************")
 
         return up, caveats
 
@@ -2918,13 +2918,13 @@ class Update(Base):
         # Commit the changes in the db before calling a celery task.
         db.commit()
 
-        log.info("DEBUG ************* Set request Triggering handle_update **************")
+        log.info(f"DEBUG ************* Set request Triggering handle_update {alias}**************")
         if action == UpdateRequest.testing:
             handle_update.delay(
                 api_version=2, action="testing",
                 update_alias=alias,
                 agent=username)
-        log.info("DEBUG ************* Set request handle_update done **************")
+        log.info(f"DEBUG ************* Set request handle_update done {alias}**************")
 
     def waive_test_results(self, username, comment=None, tests=None):
         """
