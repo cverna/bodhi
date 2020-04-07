@@ -42,7 +42,6 @@ def main(builds: typing.List[str],
     """
     try:
         koji = buildsys.get_session()
-        koji.multicall = True
 
         if pending_testing_tag is not None:
             # Validate that <koji_tag>-pending-signing and <koji-tag>-testing-signing exists
@@ -55,6 +54,7 @@ def main(builds: typing.List[str],
                 koji.createTag(pending_testing_tag, parent=from_tag)
                 koji.editTag2(pending_testing_tag, perm="autosign")
 
+            koji.multicall = True
             for b in builds:
                 log.info(f"Tagging build {b} in {pending_signing_tag}")
                 koji.tagBuild(pending_signing_tag, b)
@@ -63,6 +63,7 @@ def main(builds: typing.List[str],
             # If we don't provide a pending_testing_tag, then we have merged the
             # side tag into the release pending_signing tag.
             # We can remove the side tag.
+            koji.multicall = True
             for b in builds:
                 log.info(f"Tagging build {b} in {pending_signing_tag} and {candidate_tag}")
                 koji.tagBuild(pending_signing_tag, b)
