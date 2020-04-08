@@ -596,11 +596,13 @@ def new_update(request):
                         # of the release to funnel the builds back into a normal workflow for a
                         # stable release.
                         log.info(f"DEBUG ************* new update handle_side_and_related_tags_task {u.alias}**************")
+                        pending_signing_tag = u.release.pending_signing_tag
+                        candidate_tag = u.release.candidate_tag
                         handle_side_and_related_tags_task.delay(
                             builds=builds,
-                            pending_signing_tag=u.release.pending_signing_tag,
+                            pending_signing_tag=pending_signing_tag,
                             from_tag=from_tag,
-                            candidate_tag=u.release.candidate_tag)
+                            candidate_tag=candidate_tag)
                         log.info(f"DEBUG ************* new update handle_side_and_related_tags_task done {u.alias}**************")
 
     except LockedUpdateException as e:
