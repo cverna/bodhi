@@ -122,7 +122,7 @@ def expire_overrides_task(**kwargs):
     main()
 
 
-@app.task(name="handle_side_and_related_tags")
+@app.task(name="handle_side_and_related_tags", ignore_result=True)
 def handle_side_and_related_tags_task(
         builds: typing.List[str],
         pending_signing_tag: str,
@@ -136,14 +136,10 @@ def handle_side_and_related_tags_task(
     main(builds, pending_signing_tag, from_tag, pending_testing_tag, candidate_tag)
 
 
-@app.task(name="tag_update_builds", bind=True)
-def tag_update_builds_task(self, tag: str, builds: typing.List[str]):
+@app.task(name="tag_update_builds", ignore_result=True)
+def tag_update_builds_task(tag: str, builds: typing.List[str]):
     """Handle tagging builds for an update in Koji."""
     from .tag_update_builds import main
     log.info("Received an order to tag builds for an update")
     _do_init()
-    try:
-        main(tag, builds)
-    except Exception as e:
-        log.exception("tag_update_builds_task failed, retrying")
-        raise self.retry(exc=e)
+    main(tag, builds)
