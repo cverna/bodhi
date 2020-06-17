@@ -22,7 +22,7 @@ import logging
 from sqlalchemy import func
 
 from bodhi.messages.schemas import update as update_schemas
-from bodhi.server import Session, notifications
+from bodhi.server import Session, notifications, buildsys
 from bodhi.server.util import transactional_session_maker
 from ..models import Update, UpdateStatus, UpdateRequest
 from ..config import config
@@ -122,6 +122,7 @@ def approve_update(update: Update, db: Session):
             update.date_stable = update.date_pushed = func.current_timestamp()
             update.comment(db, "This update has been submitted for stable by bodhi",
                            author=u'bodhi')
+            db.commit()
             # Multi build update
             if update.from_tag:
                 # Merging the side tag should happen here
@@ -131,6 +132,11 @@ def approve_update(update: Update, db: Session):
                 update.remove_tag(pending_signing_tag)
                 update.remove_tag(testing_tag)
                 update.remove_tag(update.from_tag)
+
+                koji = buildsys.get_session()
+                koji.deleteTag(pending_signing_tag)
+                koji.deleteTag(testing_tag)
+
             else:
                 # Single build update
                 update.remove_tag(update.release.pending_testing_tag)
