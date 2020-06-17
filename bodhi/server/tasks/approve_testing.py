@@ -132,8 +132,10 @@ def approve_update(update: Update, db: Session):
                 update.remove_tag(testing_tag)
                 update.remove_tag(update.from_tag)
                 koji = buildsys.get_session()
-                koji.deleteTag(pending_signing_tag)
-                koji.deleteTag(testing_tag)
+                if koji.getTag(pending_signing_tag):
+                    koji.deleteTag(pending_signing_tag)
+                if koji.getTag(testing_tag):
+                    koji.deleteTag(testing_tag)
                 # Removes the tag and the build target from koji.
                 koji.removeSideTag(update.from_tag)
             else:
